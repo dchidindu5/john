@@ -900,11 +900,19 @@ static void single_run(void)
 	} while (rules_stacked_after && rules_advance_stack(&single_rule_stack, 0));
 }
 
+/*
+This function runs:
+When Single mode is finishing.
+*/
+// It does cleanup and final flushing.
+
 static void single_done(void)
 {
 	struct db_salt *salt;
-
+	// If we didn’t abort using (Ctrl-C)
 	if (!event_abort) {
+		// If there is at least one salt in the database. Even raw hashes have a “salt object” internally. 
+		/* So this condition is always TRUE even if there are zero seed words.This is why the message still prints.*/
 		if ((salt = single_db->salts)) {
 			if (john_main_process) {
 				log_event("- Processing the remaining buffered "
@@ -940,9 +948,19 @@ void do_single_crack(struct db_main *db)
 
 	single_db = db;
 	rule_ctx = &ctx;
-	single_init();
-	single_run();
-	single_done();
+	single_init(); // It builds seeds
+	/* Skip Single mode if no seed words were generated */
+	/* If Single mode has no seed words, print a message (if appropriate) and exit early without running anything. */
+    if (!single_seed || !single_seed->count) {
+        if (john_main_process && options.verbosity >= VERB_DEFAULT)
+            fprintf(stderr,
+                    "Single mode skipped: no seed words available.\n");
+
+        rule_ctx = NULL;
+        return;
+    }
+	single_run(); // it generates & try candidates. that is single, wordlists and incremental modes
+	single_done(); // flush buffers + print "Almost done"
 	rule_ctx = NULL; /* Just for good measure */
 
 	if (john_main_process && db->salt_count > 1 &&
